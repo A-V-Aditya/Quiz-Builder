@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS quizzes (
     title TEXT NOT NULL,
     description TEXT,
     status TEXT CHECK(status IN ('open', 'closed')) DEFAULT 'open',
+    disable_copy INTEGER DEFAULT 1,
+    end_date TEXT, -- Optional expiration timestamp (e.g. ISO string)
+    results_policy TEXT DEFAULT 'on_quiz_end', -- 'on_quiz_end', 'immediate_score_only', 'immediate_full'
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -28,11 +31,16 @@ CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     quiz_id INTEGER NOT NULL,
     question_text TEXT NOT NULL,
-    option_a TEXT NOT NULL,
-    option_b TEXT NOT NULL,
-    option_c TEXT NOT NULL,
-    option_d TEXT NOT NULL,
-    correct_option TEXT CHECK(correct_option IN ('A', 'B', 'C', 'D')) NOT NULL,
+    question_type TEXT DEFAULT 'single', -- 'single', 'multiple', 'descriptive'
+    grading_mode TEXT DEFAULT 'manual', -- 'manual', 'ai'
+    image_url TEXT,
+    word_limit INTEGER DEFAULT 0,
+    option_a TEXT,
+    option_b TEXT,
+    option_c TEXT,
+    option_d TEXT,
+    correct_option TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
 );
 
@@ -48,13 +56,15 @@ CREATE TABLE IF NOT EXISTS attempts (
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- 5. Attempt Answers Table (Stores student's chosen answer for each question)
+-- 5. Attempt Answers Table
 CREATE TABLE IF NOT EXISTS attempt_answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     attempt_id INTEGER NOT NULL,
     question_id INTEGER NOT NULL,
-    selected_option TEXT CHECK(selected_option IN ('A', 'B', 'C', 'D')) NOT NULL,
+    selected_option TEXT,
     is_correct INTEGER NOT NULL DEFAULT 0,
+    feedback TEXT, -- AI evaluation summary or teacher rubric comment
+    graded_by TEXT DEFAULT 'auto', -- 'auto', 'ai', 'teacher', 'manual'
     FOREIGN KEY (attempt_id) REFERENCES attempts(id) ON DELETE CASCADE,
     FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
 );
