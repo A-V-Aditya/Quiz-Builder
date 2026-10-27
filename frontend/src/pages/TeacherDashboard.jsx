@@ -71,8 +71,9 @@ export default function TeacherDashboard() {
           <p className="subtitle">Welcome, Prof. {user?.name}! Manage your quizzes and student evaluations.</p>
         </div>
         <div>
-          <Link to="/teacher/create-quiz" className="btn btn-primary">
-            + Create New Quiz
+          <Link to="/teacher/create-quiz" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <span>+ Create New Quiz</span>
+            <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.25)', padding: '2px 6px', borderRadius: '4px' }}>✨ AI PDF</span>
           </Link>
         </div>
       </div>

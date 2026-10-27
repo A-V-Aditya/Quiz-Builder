@@ -11,7 +11,16 @@ A full-stack Quiz Builder application built with **React**, **Node.js + Express*
 - **Login**: Secure authentication using password hashing (`bcryptjs`) and JSON Web Tokens (`JWT`).
 
 ### 2. Teacher Features
-- **Create Quizzes**: Add title, description, and dynamically add/remove multiple-choice questions (Option A, B, C, D) and select the correct option.
+- **✨ AI PDF Quiz Scanner & Generator**:
+  - Upload any study material, lecture notes, textbook chapters, or syllabi in PDF format (drag & drop or file picker up to 20MB).
+  - Automatically parses PDF text (`pdf-parse`) and generates high-quality Multiple Choice Questions (MCQs) using Google Gemini AI (`@google/genai`) or OpenAI.
+  - Built-in heuristic NLP document analysis fallback so quiz generation works seamlessly even without an AI API key configured.
+  - Customizable number of questions (3, 5, 8, 10, 15) and difficulty level (Easy, Medium, Hard, Mixed).
+- **Interactive Question Editing & Management**:
+  - Full control over AI-generated questions: review, edit question prompts, adjust options (A, B, C, D), and modify the correct answer key.
+  - **Add More Questions**: Add custom questions alongside AI questions with "+ Add Question".
+  - **Remove Questions**: Discard any unwanted questions with a single click.
+  - **Duplicate & Reset**: Clone questions or reset questions as needed.
 - **Active Quizzes Management**: View all open quizzes created by the teacher.
 - **Close Quizzes**: Close any active quiz with a single click. Closing a quiz stops further attempts and automatically releases scores to students.
 - **View Student Scores**: View a detailed evaluation table listing every student who attempted the quiz, their score, percentage, and submission timestamp.
@@ -55,6 +64,13 @@ npm install
 npm start
 ```
 The backend API will run on `http://localhost:5000`. On first run, it automatically creates and initializes `quiz_db.sqlite` with seed demo accounts and sample quizzes.
+
+#### Optional: Configuring Google Gemini AI API Key
+In `backend/.env`, you can add your Gemini API key:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+*(If no API key is provided, the application will automatically use its built-in document analysis NLP generator, so the system works 100% out-of-the-box offline or without an API key! Teachers can also provide an optional API key directly in the web UI).*
 
 ### Step 2: Start Frontend Client
 ```bash

@@ -1,7 +1,65 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const pool = require('../config/db');
 const { verifyToken, requireTeacher, requireStudent } = require('../middleware/auth');
+const { generateQuizFromPDF } = require('../services/aiService');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 } // 20 MB limit
+});
+
+// AI Endpoint: Generate Quiz Questions from uploaded PDF (Teacher only)
+router.post('/generate-from-pdf', verifyToken, requireTeacher, (req, res) => {
+  upload.single('pdf')(req, res, async (err) => {
+    if (err) {
+      console.error('Multer upload error:', err);
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ message: 'File is too large. Maximum PDF size is 20MB.' });
+        }
+        return res.status(400).json({ message: `Upload error: ${err.message}` });
+      }
+      return res.status(400).json({ message: `Failed to upload PDF: ${err.message}` });
+    }
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'No PDF file was uploaded. Please select and upload a PDF document.' });
+      }
+
+      if (req.file.mimetype !== 'application/pdf' && !req.file.originalname.toLowerCase().endsWith('.pdf')) {
+        return res.status(400).json({ message: 'Invalid file type. Only PDF (.pdf) files are supported.' });
+      }
+
+      const numQuestions = parseInt(req.body.numQuestions, 10) || 5;
+      const difficulty = req.body.difficulty || 'Medium';
+      const apiKey = req.body.apiKey ? req.body.apiKey.trim() : undefined;
+
+      const result = await generateQuizFromPDF(req.file.buffer, {
+        numQuestions: Math.max(1, Math.min(25, numQuestions)),
+        difficulty,
+        apiKey
+      });
+
+      return res.json({
+        success: true,
+        filename: req.file.originalname,
+        title: result.title,
+        description: result.description,
+        questions: result.questions,
+        source: result.source,
+        message: result.message
+      });
+    } catch (error) {
+      console.error('Error in /generate-from-pdf route:', error);
+      return res.status(500).json({
+        message: error.message || 'An error occurred while scanning the PDF and generating questions.'
+      });
+    }
+  });
+});
 
 // 1. Create a Quiz (Teacher only)
 router.post('/', verifyToken, requireTeacher, async (req, res) => {

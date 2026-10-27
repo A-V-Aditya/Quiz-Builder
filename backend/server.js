@@ -30,6 +30,14 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
+// Express Error Handler - Ensures ALL errors return clean JSON, never HTML
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  res.status(err.status || 500).json({
+    message: err.message || 'An unexpected internal server error occurred.'
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server started on http://localhost:${PORT}`);
