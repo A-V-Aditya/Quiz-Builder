@@ -64,7 +64,7 @@ router.post('/submit', verifyToken, requireStudent, async (req, res) => {
       evaluatedAnswers.push({
         question_id: qId,
         selected_option: selected,
-        is_correct: isCorrect
+        is_correct: isCorrect ? 1 : 0
       });
     }
 
@@ -156,7 +156,7 @@ router.get('/quiz/:quizId', verifyToken, requireTeacher, async (req, res) => {
         u.email AS student_email,
         a.score,
         a.total_questions,
-        ROUND((a.score / a.total_questions) * 100, 1) AS percentage,
+        ROUND((a.score * 100.0 / a.total_questions), 1) AS percentage,
         a.submitted_at
       FROM attempts a
       JOIN users u ON a.student_id = u.id
@@ -232,7 +232,7 @@ router.get('/detail/:attemptId', verifyToken, async (req, res) => {
 
     res.json({
       attempt,
-      answers
+      answers: answers.map(a => ({ ...a, is_correct: Boolean(a.is_correct) }))
     });
   } catch (error) {
     console.error('Error fetching attempt details:', error);

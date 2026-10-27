@@ -1,6 +1,6 @@
 # Online Quiz Builder Application
 
-A full-stack Quiz Builder application built with **React**, **Node.js + Express**, and **MySQL**, designed with a clean, minimal, and intuitive interface suitable for an academic MCA project.
+A full-stack Quiz Builder application built with **React**, **Node.js + Express**, and **SQLite3**, designed with a clean, minimal, and intuitive interface suitable for an academic MCA project.
 
 ---
 
@@ -26,8 +26,11 @@ A full-stack Quiz Builder application built with **React**, **Node.js + Express*
 
 ---
 
-## Database Schema (MySQL: `quiz_db`)
+## Database (SQLite3: `quiz_db.sqlite`)
 
+The application uses an embedded **SQLite3** database with foreign key enforcement (`PRAGMA foreign_keys = ON;`). Zero external database installation or setup (e.g., MySQL or XAMPP) is needed; the database file and tables are automatically initialized on server startup.
+
+### Schema Structure:
 1. **`users`**: `id`, `name`, `email`, `password`, `role` (`student` | `teacher`), `created_at`
 2. **`quizzes`**: `id`, `teacher_id`, `title`, `description`, `status` (`open` | `closed`), `created_at`
 3. **`questions`**: `id`, `quiz_id`, `question_text`, `option_a`, `option_b`, `option_c`, `option_d`, `correct_option` (`A` | `B` | `C` | `D`)
@@ -42,23 +45,18 @@ The complete schema script is available in `backend/schema.sql`.
 
 ### Prerequisites
 - Node.js (v18+)
-- MySQL Server / XAMPP running on port `3306` with default user `root` and no password (or configure in `backend/.env`).
 
-### Step 1: Database Setup
-Import the database schema into MySQL:
-```bash
-mysql -u root < backend/schema.sql
-```
+*(No separate MySQL server or database service required!)*
 
-### Step 2: Start Backend Server
+### Step 1: Start Backend Server
 ```bash
 cd backend
 npm install
 npm start
 ```
-The backend API will run on `http://localhost:5000`.
+The backend API will run on `http://localhost:5000`. On first run, it automatically creates and initializes `quiz_db.sqlite` with seed demo accounts and sample quizzes.
 
-### Step 3: Start Frontend Client
+### Step 2: Start Frontend Client
 ```bash
 cd frontend
 npm install

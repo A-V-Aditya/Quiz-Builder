@@ -28,7 +28,7 @@ router.post('/', verifyToken, requireTeacher, async (req, res) => {
 
     // Insert Quiz
     const [quizResult] = await connection.query(
-      'INSERT INTO quizzes (teacher_id, title, description, status) VALUES (?, ?, ?, "open")',
+      "INSERT INTO quizzes (teacher_id, title, description, status) VALUES (?, ?, ?, 'open')",
       [req.user.id, title, description || '']
     );
     const quizId = quizResult.insertId;
@@ -175,7 +175,7 @@ router.patch('/:id/close', verifyToken, requireTeacher, async (req, res) => {
       return res.status(403).json({ message: 'Access forbidden. You can only close your own quizzes.' });
     }
 
-    await pool.query('UPDATE quizzes SET status = "closed" WHERE id = ?', [quizId]);
+    await pool.query("UPDATE quizzes SET status = 'closed' WHERE id = ?", [quizId]);
 
     res.json({ message: 'Quiz has been closed successfully. Students can now view their scores!' });
   } catch (error) {

@@ -1,7 +1,7 @@
 {
   "name": "quiz-app-backend",
   "version": "1.0.0",
-  "description": "Quiz Builder Backend with Express and MySQL",
+  "description": "Quiz Builder Backend with Express and SQLite3",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,6 +13,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.9.7"
+    "sqlite3": "^6.0.1"
   }
 }

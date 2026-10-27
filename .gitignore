@@ -31,3 +31,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# SQLite Database
+*.sqlite
+*.sqlite3
+*.db
