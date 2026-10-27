@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { PopupProvider } from './context/PopupContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -9,6 +10,7 @@ import Register from './pages/Register';
 import TeacherDashboard from './pages/TeacherDashboard';
 import CreateQuiz from './pages/CreateQuiz';
 import QuizSubmissions from './pages/QuizSubmissions';
+import QuizAnalytics from './pages/QuizAnalytics';
 import StudentDashboard from './pages/StudentDashboard';
 import AttemptQuiz from './pages/AttemptQuiz';
 import StudentHistory from './pages/StudentHistory';
@@ -36,72 +38,82 @@ function RootRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Navbar />
-        <main>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<RootRedirect />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+      <PopupProvider>
+        <Router>
+          <Navbar />
+          <main>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<RootRedirect />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
 
-            {/* Teacher routes */}
-            <Route
-              path="/teacher/dashboard"
-              element={
-                <ProtectedRoute allowedRole="teacher">
-                  <TeacherDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/teacher/create-quiz"
-              element={
-                <ProtectedRoute allowedRole="teacher">
-                  <CreateQuiz />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/teacher/quiz/:id/submissions"
-              element={
-                <ProtectedRoute allowedRole="teacher">
-                  <QuizSubmissions />
-                </ProtectedRoute>
-              }
-            />
+              {/* Teacher routes */}
+              <Route
+                path="/teacher/dashboard"
+                element={
+                  <ProtectedRoute allowedRole="teacher">
+                    <TeacherDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/teacher/create-quiz"
+                element={
+                  <ProtectedRoute allowedRole="teacher">
+                    <CreateQuiz />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/teacher/quiz/:id/submissions"
+                element={
+                  <ProtectedRoute allowedRole="teacher">
+                    <QuizSubmissions />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/teacher/quiz/:id/analytics"
+                element={
+                  <ProtectedRoute allowedRole="teacher">
+                    <QuizAnalytics />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Student routes */}
-            <Route
-              path="/student/dashboard"
-              element={
-                <ProtectedRoute allowedRole="student">
-                  <StudentDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/student/quiz/:id"
-              element={
-                <ProtectedRoute allowedRole="student">
-                  <AttemptQuiz />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/student/history"
-              element={
-                <ProtectedRoute allowedRole="student">
-                  <StudentHistory />
-                </ProtectedRoute>
-              }
-            />
+              {/* Student routes */}
+              <Route
+                path="/student/dashboard"
+                element={
+                  <ProtectedRoute allowedRole="student">
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/quiz/:id"
+                element={
+                  <ProtectedRoute allowedRole="student">
+                    <AttemptQuiz />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/history"
+                element={
+                  <ProtectedRoute allowedRole="student">
+                    <StudentHistory />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </Router>
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </main>
+        </Router>
+      </PopupProvider>
     </AuthProvider>
   );
 }

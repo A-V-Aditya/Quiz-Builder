@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePopup } from '../context/PopupContext';
 import { API_BASE_URL } from '../config';
 
 export default function StudentHistory() {
-  const { user, token } = useAuth();
+  const { token } = useAuth();
+  const { showToast } = usePopup();
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,7 +25,7 @@ export default function StudentHistory() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to fetch your quiz attempts.');
+        throw new Error(data.message || 'Failed to fetch attempts.');
       }
       setAttempts(data);
     } catch (err) {
@@ -52,7 +54,7 @@ export default function StudentHistory() {
       }
       setReviewDetails(data);
     } catch (err) {
-      alert(err.message);
+      showToast(err.message, 'danger');
     } finally {
       setReviewLoading(false);
     }
@@ -60,90 +62,102 @@ export default function StudentHistory() {
 
   return (
     <div className="container">
-      <div className="dashboard-header">
+      {/* Back button */}
+      <div className="mb-15">
+        <Link to="/student/dashboard" className="nav-back-link">
+          &larr; Back to Dashboard
+        </Link>
+      </div>
+
+      {/* Page Header */}
+      <div className="page-header-row">
         <div>
-          <h2>My Past Quizzes & Scores</h2>
-          <p className="subtitle">Track your attempted quizzes and review published scores.</p>
+          <span className="section-badge">Student Records</span>
+          <h1 className="page-title">My Attempts & Scores</h1>
+          <p className="page-subtitle">Track your attempted tests, published scores, and solutions.</p>
         </div>
         <div>
           <Link to="/student/dashboard" className="btn btn-secondary">
-            &larr; Back to Available Quizzes
+            &larr; Available Quizzes
           </Link>
         </div>
-      </div>
-
-      <div className="alert alert-info">
-        <strong>Note on Scores:</strong> As per evaluation policy, your score is released only after your teacher closes the quiz!
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
 
       {loading ? (
-        <p className="text-center py-20">Loading your history...</p>
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <span>Loading scorecards...</span>
+        </div>
       ) : attempts.length === 0 ? (
-        <div className="card text-center py-30">
-          <h3>No Quizzes Attempted Yet</h3>
-          <p className="text-muted mt-10">You haven't attempted any quizzes yet.</p>
-          <Link to="/student/dashboard" className="btn btn-primary mt-20">
-            Browse Available Quizzes
+        <div className="empty-state-card">
+          <div className="empty-icon">📊</div>
+          <h3>No Attempts Found</h3>
+          <p className="empty-desc">You have not taken any quizzes yet.</p>
+          <Link to="/student/dashboard" className="btn btn-primary mt-15">
+            Take a Quiz
           </Link>
         </div>
       ) : (
-        <div className="table-responsive">
-          <table className="quiz-table">
+        <div className="table-responsive card-table">
+          <table className="custom-table">
             <thead>
               <tr>
                 <th>Quiz Title</th>
                 <th>Instructor</th>
-                <th>Submitted On</th>
-                <th>Quiz Status</th>
+                <th>Submitted</th>
+                <th>Status</th>
                 <th>Score</th>
-                <th>Action</th>
+                <th>Solutions</th>
               </tr>
             </thead>
             <tbody>
               {attempts.map((att) => {
                 const isClosed = att.quiz_status === 'closed';
-                const percentage = isClosed
-                  ? ((att.score / att.total_questions) * 100).toFixed(1)
-                  : null;
+                const hasScore = att.score !== null && att.score !== undefined;
+                const percentage = (hasScore && att.total_questions > 0)
+                  ? Math.round((att.score / att.total_questions) * 100)
+                  : 0;
 
                 return (
-                  <tr key={att.attempt_id}>
+                  <tr key={att.attempt_id || att.id}>
                     <td>
                       <strong>{att.quiz_title}</strong>
-                      {att.quiz_description && (
-                        <p className="quiz-desc-preview">{att.quiz_description}</p>
-                      )}
                     </td>
                     <td>{att.teacher_name}</td>
                     <td>{new Date(att.submitted_at).toLocaleDateString()}</td>
                     <td>
-                      <span className={`badge ${isClosed ? 'badge-secondary' : 'badge-success'}`}>
-                        {att.quiz_status.toUpperCase()}
+                      <span className={`status-pill ${isClosed ? 'pill-closed' : 'pill-active'}`}>
+                        {isClosed ? 'Closed' : 'Active'}
                       </span>
                     </td>
                     <td>
-                      {isClosed ? (
-                        <span className="score-badge">
-                          <strong>{att.score} / {att.total_questions}</strong> ({percentage}%)
-                        </span>
+                      {hasScore ? (
+                        <div className="score-badge-wrap">
+                          <span className="score-value">{att.score} / {att.total_questions}</span>
+                          <span className={`score-percent ${percentage >= 70 ? 'text-success' : percentage >= 40 ? 'text-primary' : 'text-danger'}`}>
+                            ({percentage}%)
+                          </span>
+                        </div>
                       ) : (
-                        <span className="pending-score">
-                          Pending (Teacher hasn't closed quiz yet)
+                        <span className="badge-locked" title="Score unlocks when quiz concludes">
+                          🔒 Locked until close
                         </span>
                       )}
                     </td>
                     <td>
-                      {isClosed ? (
+                      {att.can_view_solutions ? (
                         <button
-                          onClick={() => handleViewReview(att.attempt_id)}
-                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleViewReview(att.attempt_id || att.id)}
+                          className="btn btn-sm btn-primary"
                         >
-                          {selectedAttempt === att.attempt_id ? 'Hide Solution' : 'View Solution'}
+                          View Solutions
                         </button>
                       ) : (
-                        <span className="text-muted text-sm">Awaiting Close</span>
+                        <span className="badge-locked" title="Solutions unlock when quiz ends">
+                          🔒 Hidden
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -154,46 +168,129 @@ export default function StudentHistory() {
         </div>
       )}
 
-      {/* Review details for closed quiz */}
-      {selectedAttempt && reviewDetails && (
-        <div className="card mt-20" style={{ border: '2px solid #28a745' }}>
-          <div className="detail-header">
-            <h3>Detailed Solution Review: {reviewDetails.attempt.quiz_title}</h3>
-            <button
-              onClick={() => { setSelectedAttempt(null); setReviewDetails(null); }}
-              className="btn btn-secondary btn-sm"
-            >
-              Close Solution
-            </button>
-          </div>
-          <p className="mb-20">
-            Final Score: <strong>{reviewDetails.attempt.score} / {reviewDetails.attempt.total_questions}</strong>
-          </p>
-
-          <div className="review-questions">
-            {reviewDetails.answers.map((ans, i) => (
-              <div
-                key={i}
-                className={`answer-item card ${ans.is_correct ? 'border-success' : 'border-danger'} mb-10`}
-              >
-                <p><strong>Q{i + 1}: {ans.question_text}</strong></p>
-                <div className="review-options">
-                  <div className={ans.selected_option === 'A' ? 'chosen-option' : ''}>A: {ans.option_a}</div>
-                  <div className={ans.selected_option === 'B' ? 'chosen-option' : ''}>B: {ans.option_b}</div>
-                  <div className={ans.selected_option === 'C' ? 'chosen-option' : ''}>C: {ans.option_c}</div>
-                  <div className={ans.selected_option === 'D' ? 'chosen-option' : ''}>D: {ans.option_d}</div>
-                </div>
-                <div className="answer-status-tag mt-10">
-                  <span>Your Answer: <strong>Option {ans.selected_option || 'None'}</strong></span>
-                  {' | '}
-                  <span>Correct Answer: <strong>Option {ans.correct_option}</strong></span>
-                  {' | '}
-                  <span className={ans.is_correct ? 'text-success' : 'text-danger'}>
-                    {ans.is_correct ? 'Correct (+1)' : 'Incorrect (0)'}
-                  </span>
-                </div>
+      {/* Review Modal */}
+      {selectedAttempt && (
+        <div className="modal-overlay" onClick={() => setSelectedAttempt(null)}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <span className="section-badge">Solution Breakdown</span>
+                <h3 className="modal-title">{reviewDetails?.quiz?.title || 'Quiz Review'}</h3>
               </div>
-            ))}
+              <button onClick={() => setSelectedAttempt(null)} className="btn-close-modal">
+                &times;
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {reviewLoading ? (
+                <div className="loading-state">
+                  <div className="spinner"></div>
+                  <span>Loading review...</span>
+                </div>
+              ) : reviewDetails ? (
+                <>
+                  <div className="score-summary-banner">
+                    <div className="summary-stat">
+                      <div className="summary-stat-val">{reviewDetails.attempt.score} / {reviewDetails.attempt.total_questions}</div>
+                      <div className="summary-stat-label">Final Score</div>
+                    </div>
+                    <div className="summary-stat">
+                      <div className="summary-stat-val">
+                        {Math.round((reviewDetails.attempt.score / reviewDetails.attempt.total_questions) * 100)}%
+                      </div>
+                      <div className="summary-stat-label">Percentage</div>
+                    </div>
+                  </div>
+
+                  <div className="review-list">
+                    {reviewDetails.breakdown?.map((item, index) => {
+                      const qType = item.question_type || 'single';
+                      const selectedList = (item.selected_option || '').split(',').map(s => s.trim().toUpperCase());
+                      const correctList = (item.correct_option || '').split(',').map(s => s.trim().toUpperCase());
+
+                      return (
+                        <div
+                          key={item.question_id}
+                          className={`review-card ${item.is_correct ? 'card-pass' : 'card-fail'}`}
+                        >
+                          <div className="review-card-head">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span className="question-idx-badge">Q{index + 1}</span>
+                              <span className="type-badge-pill">
+                                {qType === 'multiple' ? 'Multiple Choice' : qType === 'descriptive' ? 'Descriptive' : 'Single Choice'}
+                              </span>
+                            </div>
+                            <span className={`result-chip ${item.is_correct ? 'chip-correct' : 'chip-wrong'}`}>
+                              {item.is_correct ? '✓ Correct' : '✕ Incorrect'}
+                            </span>
+                          </div>
+
+                          <p className="review-prompt">{item.question_text}</p>
+
+                          {/* Image if attached */}
+                          {item.image_url && (
+                            <div className="review-image-wrap mb-10">
+                              <img src={item.image_url} alt={`Question ${index + 1}`} className="img-thumbnail" />
+                            </div>
+                          )}
+
+                          {/* Descriptive Answer Display */}
+                          {qType === 'descriptive' ? (
+                            <div className="review-descriptive-box">
+                              <div className="descriptive-review-block">
+                                <span className="descriptive-sub-label">Your Submitted Response:</span>
+                                <div className="student-written-response">
+                                  {item.selected_option ? item.selected_option : <em className="text-muted">(No response entered)</em>}
+                                </div>
+                              </div>
+                              {item.correct_option && (
+                                <div className="descriptive-review-block mt-10">
+                                  <span className="descriptive-sub-label">Instructor Reference Answer / Rubric:</span>
+                                  <div className="instructor-reference-answer">
+                                    {item.correct_option}
+                                  </div>
+                                </div>
+                              )}
+                              {item.feedback && (
+                                <div className="eval-feedback-callout mt-10">
+                                  <span className="feedback-label">
+                                    {item.graded_by === 'ai' ? '🤖 AI Assessment Feedback:' : '💬 Instructor Notes:'}
+                                  </span>
+                                  <p className="feedback-text">{item.feedback}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Single / Multiple Options Grid */
+                            <div className="review-options-grid">
+                              {(['A', 'B', 'C', 'D']).map((letter) => {
+                                const optKey = `option_${letter.toLowerCase()}`;
+                                const isSelected = selectedList.includes(letter);
+                                const isCorrectOpt = correctList.includes(letter);
+
+                                let optClass = 'opt-neutral';
+                                if (isCorrectOpt) optClass = 'opt-key-correct';
+                                else if (isSelected && !isCorrectOpt) optClass = 'opt-key-wrong';
+
+                                return (
+                                  <div key={letter} className={`review-opt-item ${optClass}`}>
+                                    <span className="opt-letter">{qType === 'multiple' ? (isSelected ? '☑' : '☐') : letter}</span>
+                                    <span className="opt-desc">{item[optKey]}</span>
+                                    {isCorrectOpt && <span className="opt-badge-pill">Correct Answer</span>}
+                                    {isSelected && !isCorrectOpt && <span className="opt-badge-pill badge-err">Your Pick</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

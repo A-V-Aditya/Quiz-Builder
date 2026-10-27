@@ -1,19 +1,34 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePopup } from '../context/PopupContext';
 import { API_BASE_URL } from '../config';
 
 export default function CreateQuiz() {
   const { token } = useAuth();
+  const { showConfirm, showAlert, showToast } = usePopup();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+
+  // Top-level Mode: 'ai' or 'manual'
+  const [creationMode, setCreationMode] = useState('ai');
+  // AI Sub-mode: 'prompt' or 'pdf'
+  const [aiSubMode, setAiSubMode] = useState('prompt');
 
   // General Quiz State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [disableCopy, setDisableCopy] = useState(true);
+  const [endDate, setEndDate] = useState('');
+  const [resultsPolicy, setResultsPolicy] = useState('on_quiz_end');
+
+  // Questions State
   const [questions, setQuestions] = useState([
     {
       question_text: '',
+      question_type: 'single', // 'single', 'multiple', 'descriptive'
+      image_url: '',
+      word_limit: 100,
       option_a: '',
       option_b: '',
       option_c: '',
@@ -22,9 +37,13 @@ export default function CreateQuiz() {
     }
   ]);
 
-  // AI Scanner State
+  // AI Generator State
+  const [topicPrompt, setTopicPrompt] = useState('');
   const [pdfFile, setPdfFile] = useState(null);
+  const [pdfPrompt, setPdfPrompt] = useState('');
+  const [showPdfPrompt, setShowPdfPrompt] = useState(false);
   const [numQuestions, setNumQuestions] = useState(5);
+  const [isCustomQuestions, setIsCustomQuestions] = useState(false);
   const [difficulty, setDifficulty] = useState('Medium');
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
@@ -33,57 +52,102 @@ export default function CreateQuiz() {
   const [aiError, setAiError] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
-  // General Form State
+  // Submit State
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Handle manual question edits
   const handleQuestionChange = (index, field, value) => {
     const updated = [...questions];
     updated[index][field] = value;
     setQuestions(updated);
   };
 
-  // Add a blank question
-  const addQuestion = () => {
+  const handleToggleMultipleCorrect = (index, letter) => {
+    const current = questions[index].correct_option || '';
+    const currentList = current.split(',').filter(Boolean);
+    let newList;
+    if (currentList.includes(letter)) {
+      newList = currentList.filter(l => l !== letter);
+    } else {
+      newList = [...currentList, letter].sort();
+    }
+    handleQuestionChange(index, 'correct_option', newList.join(','));
+  };
+
+  const handleImageUpload = (index, e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        showAlert({
+          title: 'Invalid File',
+          message: 'Please choose an image file (PNG, JPG, SVG, WebP).',
+          type: 'danger'
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        handleQuestionChange(index, 'image_url', uploadEvent.target?.result || '');
+        showToast('Image attached to question.', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addQuestion = (type = 'single') => {
     setQuestions([
       ...questions,
       {
         question_text: '',
+        question_type: type,
+        image_url: '',
+        word_limit: 100,
+        grading_mode: type === 'descriptive' ? 'manual' : null,
         option_a: '',
         option_b: '',
         option_c: '',
         option_d: '',
-        correct_option: 'A'
+        correct_option: type === 'multiple' ? 'A' : type === 'single' ? 'A' : ''
       }
     ]);
   };
 
-  // Remove a specific question
   const removeQuestion = (index) => {
     if (questions.length === 1) {
-      alert('A quiz must have at least one question.');
+      showAlert({
+        title: 'Action Restricted',
+        message: 'A quiz must contain at least one question.',
+        type: 'warning'
+      });
       return;
     }
     const updated = questions.filter((_, i) => i !== index);
     setQuestions(updated);
   };
 
-  // Duplicate an existing question
   const duplicateQuestion = (index) => {
     const target = questions[index];
     const duplicated = { ...target };
     const updated = [...questions];
     updated.splice(index + 1, 0, duplicated);
     setQuestions(updated);
+    showToast('Question cloned.', 'info');
   };
 
-  // Clear all questions
-  const clearQuestions = () => {
-    if (window.confirm('Are you sure you want to reset all questions?')) {
+  const clearQuestions = async () => {
+    const confirmed = await showConfirm({
+      title: 'Reset Questions',
+      message: 'Are you sure you want to discard current questions and reset?',
+      confirmText: 'Reset',
+      isDanger: true
+    });
+    if (confirmed) {
       setQuestions([
         {
           question_text: '',
+          question_type: 'single',
+          image_url: '',
+          word_limit: 100,
           option_a: '',
           option_b: '',
           option_c: '',
@@ -91,15 +155,16 @@ export default function CreateQuiz() {
           correct_option: 'A'
         }
       ]);
+      showToast('Questions reset to default.', 'info');
     }
   };
 
-  // Handle PDF file selection
+  // PDF Dropzone handlers
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-        setAiError('Please select a valid PDF file (.pdf).');
+        setAiError('Please select a valid PDF file.');
         return;
       }
       setPdfFile(file);
@@ -108,7 +173,6 @@ export default function CreateQuiz() {
     }
   };
 
-  // Drag and drop handlers
   const handleDragOver = (e) => {
     e.preventDefault();
     setDragOver(true);
@@ -125,7 +189,7 @@ export default function CreateQuiz() {
     const file = e.dataTransfer.files?.[0];
     if (file) {
       if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-        setAiError('Please select a valid PDF file (.pdf).');
+        setAiError('Please select a valid PDF file.');
         return;
       }
       setPdfFile(file);
@@ -134,7 +198,6 @@ export default function CreateQuiz() {
     }
   };
 
-  // Remove selected PDF
   const handleRemoveFile = () => {
     setPdfFile(null);
     if (fileInputRef.current) {
@@ -142,64 +205,58 @@ export default function CreateQuiz() {
     }
   };
 
-  // AI PDF Generation Request
-  const handleAiScan = async (e) => {
+  // AI Generation (PDF or Prompt)
+  const handleAiGenerate = async (e) => {
     e.preventDefault();
-    if (!pdfFile) {
-      setAiError('Please select or upload a PDF document first.');
-      return;
-    }
-
     setAiLoading(true);
     setAiError('');
     setAiSuccessMessage('');
 
-    const formData = new FormData();
-    formData.append('pdf', pdfFile);
-    formData.append('numQuestions', numQuestions);
-    formData.append('difficulty', difficulty);
-    if (apiKey.trim()) {
-      formData.append('apiKey', apiKey.trim());
-    }
-
     try {
-      const res = await fetch(`${API_BASE_URL}/quizzes/generate-from-pdf`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      let data;
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        console.error('Non-JSON response from server:', text);
-        if (res.status === 404) {
-          throw new Error('API route /api/quizzes/generate-from-pdf not found. Please ensure the backend server is running the latest code.');
-        } else if (res.status >= 500) {
-          throw new Error(`Backend server error (${res.status}). Please check backend console logs.`);
-        } else {
-          throw new Error(`Could not connect to backend API (HTTP ${res.status}). Please make sure backend is running on port 5000.`);
+      let res;
+      if (aiSubMode === 'pdf') {
+        if (!pdfFile) {
+          throw new Error('Please select or drop a PDF document first.');
         }
+        const formData = new FormData();
+        formData.append('pdf', pdfFile);
+        formData.append('numQuestions', numQuestions || 5);
+        formData.append('difficulty', difficulty);
+        if (pdfPrompt.trim()) formData.append('prompt', pdfPrompt.trim());
+        if (apiKey.trim()) formData.append('apiKey', apiKey.trim());
+
+        res = await fetch(`${API_BASE_URL}/quizzes/generate-from-pdf`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+      } else {
+        if (!topicPrompt.trim()) {
+          throw new Error('Please enter a topic or concept prompt.');
+        }
+        res = await fetch(`${API_BASE_URL}/quizzes/generate-from-prompt`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            prompt: topicPrompt.trim(),
+            numQuestions,
+            difficulty,
+            apiKey: apiKey.trim() || undefined
+          })
+        });
       }
 
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to generate questions from PDF.');
+        throw new Error(data.message || 'Failed to generate questions.');
       }
 
-      // Pre-fill Title & Description if currently empty
-      if (!title.trim() && data.title) {
-        setTitle(data.title);
-      }
-      if (!description.trim() && data.description) {
-        setDescription(data.description);
-      }
+      if (!title.trim() && data.title) setTitle(data.title);
+      if (!description.trim() && data.description) setDescription(data.description);
 
-      // Check if current questions are just 1 empty default question
       const isDefaultBlank =
         questions.length === 1 &&
         !questions[0].question_text.trim() &&
@@ -208,9 +265,12 @@ export default function CreateQuiz() {
       if (isDefaultBlank) {
         setQuestions(data.questions);
       } else {
-        const shouldAppend = window.confirm(
-          `AI scanned "${pdfFile.name}" and generated ${data.questions.length} questions!\n\nClick "OK" to APPEND these to your existing questions, or "Cancel" to REPLACE your existing questions.`
-        );
+        const shouldAppend = await showConfirm({
+          title: 'Questions Generated',
+          message: `Generated ${data.questions.length} questions! Click "Append" to add them to your existing questions, or "Replace" to overwrite.`,
+          confirmText: 'Append',
+          cancelText: 'Replace'
+        });
         if (shouldAppend) {
           setQuestions([...questions, ...data.questions]);
         } else {
@@ -218,16 +278,8 @@ export default function CreateQuiz() {
         }
       }
 
-      const sourceLabel =
-        data.source === 'gemini'
-          ? 'Google Gemini AI'
-          : data.source === 'openai'
-            ? 'OpenAI'
-            : 'Document Content Analysis';
-
-      setAiSuccessMessage(
-        `Success! Generated ${data.questions.length} questions using ${sourceLabel}. You can now review, refine, add, or remove questions below before publishing.`
-      );
+      showToast(`Generated ${data.questions.length} questions successfully!`, 'success');
+      setCreationMode('manual');
     } catch (err) {
       setAiError(err.message);
     } finally {
@@ -235,24 +287,35 @@ export default function CreateQuiz() {
     }
   };
 
-  // Save Quiz to Database
+  // Submit Quiz
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Validation
     if (!title.trim()) {
-      setError('Please provide a quiz title.');
+      setError('Quiz title is required.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      if (!q.question_text.trim() || !q.option_a.trim() || !q.option_b.trim() || !q.option_c.trim() || !q.option_d.trim()) {
-        setError(`Please fill in all options for Question #${i + 1}.`);
+      if (!q.question_text.trim()) {
+        setError(`Question #${i + 1} prompt statement is required.`);
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
+      }
+      if (q.question_type === 'single' || q.question_type === 'multiple') {
+        if (!q.option_a.trim() || !q.option_b.trim() || !q.option_c.trim() || !q.option_d.trim()) {
+          setError(`Fill in all 4 options for Question #${i + 1}.`);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        if (!q.correct_option) {
+          setError(`Designate correct option(s) for Question #${i + 1}.`);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
       }
     }
 
@@ -268,17 +331,19 @@ export default function CreateQuiz() {
         body: JSON.stringify({
           title,
           description,
+          disable_copy: disableCopy ? 1 : 0,
+          end_date: endDate || null,
+          results_policy: resultsPolicy,
           questions
         })
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to create quiz.');
+        throw new Error(data.message || 'Failed to publish quiz.');
       }
 
-      alert('Quiz created and published successfully!');
+      showToast('Quiz published successfully!', 'success');
       navigate('/teacher/dashboard');
     } catch (err) {
       setError(err.message);
@@ -290,327 +355,666 @@ export default function CreateQuiz() {
 
   return (
     <div className="container">
-      <div className="page-header">
-        <h2>Create New Quiz</h2>
-        <p className="subtitle">
-          Upload a PDF to automatically generate questions with AI, or manually build and customize your questions below.
-        </p>
+      {/* Back button */}
+      <div className="mb-15">
+        <Link to="/teacher/dashboard" className="nav-back-link">
+          &larr; Back to Dashboard
+        </Link>
+      </div>
+
+      {/* Header */}
+      <div className="page-header-row">
+        <div>
+          <span className="section-badge">Authoring Studio</span>
+          <h1 className="page-title">Create Assessment</h1>
+          <p className="page-subtitle">Build questions manually or generate automatically with AI.</p>
+        </div>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {/* 1. AI PDF Scanner & Question Generator Card */}
-      <div className="card ai-generator-card mb-20">
-        <div className="ai-card-header">
-          <div className="ai-title-wrap">
-            <span style={{ fontSize: '1.4rem' }}>📄</span>
-            <div>
-              <h3 style={{ margin: 0, display: 'inline', marginRight: '8px' }}>
-                Scan PDF & Generate Questions with AI
-              </h3>
-              <span className="ai-badge">AI Powered</span>
-            </div>
+      {/* Creation Mode Switcher */}
+      <div className="creation-mode-tabs">
+        <button
+          type="button"
+          className={`mode-tab-btn ${creationMode === 'ai' ? 'active' : ''}`}
+          onClick={() => setCreationMode('ai')}
+        >
+          <span className="mode-tab-icon">✨</span>
+          <div>
+            <strong>AI Powered Generator</strong>
+            <span>Generate from PDF or direct prompt</span>
           </div>
-          <span className="text-sm text-muted">Upload lecture slides, notes, or chapters</span>
-        </div>
+        </button>
 
-        {aiError && <div className="alert alert-danger mb-10">{aiError}</div>}
-        {aiSuccessMessage && <div className="alert alert-success mb-10">{aiSuccessMessage}</div>}
-
-        {/* Drop Zone / File Picker */}
-        {!pdfFile ? (
-          <div
-            className={`ai-drop-zone ${dragOver ? 'dragover' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".pdf,application/pdf"
-              style={{ display: 'none' }}
-            />
-            <span className="ai-drop-icon">📤</span>
-            <div className="ai-drop-text">Click or drag & drop a PDF document here</div>
-            <div className="ai-drop-subtext">Supports lecture notes, study materials, syllabi (up to 20MB)</div>
+        <button
+          type="button"
+          className={`mode-tab-btn ${creationMode === 'manual' ? 'active' : ''}`}
+          onClick={() => setCreationMode('manual')}
+        >
+          <span className="mode-tab-icon">✍️</span>
+          <div>
+            <strong>Manual Question Builder</strong>
+            <span>Custom text, images, and question types</span>
           </div>
-        ) : (
-          <div className="ai-file-preview">
-            <div className="ai-file-info">
-              <span style={{ fontSize: '1.5rem' }}>📑</span>
-              <div>
-                <div className="ai-file-name">{pdfFile.name}</div>
-                <div className="ai-file-size">{(pdfFile.size / 1024).toFixed(1)} KB</div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleRemoveFile}
-              className="btn btn-secondary btn-sm"
-              disabled={aiLoading}
-            >
-              Change PDF
-            </button>
-          </div>
-        )}
-
-        {/* Generation Options */}
-        <div className="ai-controls-grid">
-          <div className="form-group" style={{ margin: 0 }}>
-            <label htmlFor="numQuestions">Number of Questions</label>
-            <select
-              id="numQuestions"
-              value={numQuestions}
-              onChange={(e) => setNumQuestions(Number(e.target.value))}
-              className="select-input"
-              disabled={aiLoading}
-            >
-              <option value={3}>3 Questions</option>
-              <option value={5}>5 Questions</option>
-              <option value={8}>8 Questions</option>
-              <option value={10}>10 Questions</option>
-              <option value={15}>15 Questions</option>
-            </select>
-          </div>
-
-          <div className="form-group" style={{ margin: 0 }}>
-            <label htmlFor="difficulty">Difficulty Level</label>
-            <select
-              id="difficulty"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-              className="select-input"
-              disabled={aiLoading}
-            >
-              <option value="Easy">Easy (Foundational & Definitions)</option>
-              <option value="Medium">Medium (Conceptual & Application)</option>
-              <option value="Hard">Hard (Analysis & Advanced)</option>
-              <option value="Mixed">Mixed (Balanced Variety)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Optional Custom API Key accordion */}
-        <div className="mb-10">
-          <button
-            type="button"
-            className="toggle-link"
-            onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-          >
-            {showApiKeyInput ? '▲ Hide Custom AI API Key' : '▼ Have your own Gemini / OpenAI API Key? (Optional)'}
-          </button>
-          {showApiKeyInput && (
-            <div className="form-group mt-10">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Paste Gemini (AIzaSy...) or OpenAI (sk-...) API key"
-                disabled={aiLoading}
-              />
-              <span className="text-sm text-muted">
-                Leave blank to automatically use server defaults or the built-in document analysis fallback.
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Action Button */}
-        <div>
-          <button
-            type="button"
-            onClick={handleAiScan}
-            disabled={!pdfFile || aiLoading}
-            className="btn btn-ai-generate"
-          >
-            {aiLoading ? (
-              <>
-                <span className="spinner"></span>
-                <span>Scanning PDF & Generating Questions...</span>
-              </>
-            ) : (
-              <>
-                <span>✨</span>
-                <span>Scan PDF & Generate Questions</span>
-              </>
-            )}
-          </button>
-        </div>
+        </button>
       </div>
 
-      {/* 2. Quiz Creator Form */}
+      {/* 1. AI Generator Section */}
+      {creationMode === 'ai' && (
+        <div className="ai-scanner-box mb-25">
+          <div className="ai-box-head">
+            <div className="ai-box-title">
+              <div className="ai-icon-chip">✨</div>
+              <div>
+                <h3>AI Question Generator</h3>
+                <p>Choose between PDF scan or topic prompt</p>
+              </div>
+            </div>
+            {/* Sub-mode selector */}
+            <div className="submode-pill-group">
+              <button
+                type="button"
+                className={`submode-pill ${aiSubMode === 'prompt' ? 'active' : ''}`}
+                onClick={() => setAiSubMode('prompt')}
+              >
+                💡 Topic Prompt
+              </button>
+              <button
+                type="button"
+                className={`submode-pill ${aiSubMode === 'pdf' ? 'active' : ''}`}
+                onClick={() => setAiSubMode('pdf')}
+              >
+                📄 Upload PDF
+              </button>
+            </div>
+          </div>
+
+          {aiError && <div className="alert alert-danger mb-15">{aiError}</div>}
+          {aiSuccessMessage && <div className="alert alert-success mb-15">{aiSuccessMessage}</div>}
+
+          {/* Option A: Direct Topic Prompt */}
+          {aiSubMode === 'prompt' ? (
+            <div className="ai-prompt-input-wrap">
+              <label className="input-field-label">Topic or Syllabus Prompt</label>
+              <textarea
+                rows={3}
+                className="form-control"
+                value={topicPrompt}
+                onChange={(e) => setTopicPrompt(e.target.value)}
+                placeholder="e.g. Distributed Databases, ACID properties, CAP Theorem, and Two-Phase Locking..."
+                disabled={aiLoading}
+              />
+              <div className="prompt-suggestions">
+                <span className="text-muted text-sm">Quick suggestions:</span>
+                <button
+                  type="button"
+                  className="suggestion-tag"
+                  onClick={() => setTopicPrompt('Operating Systems: Virtual Memory & Page Replacement Algorithms')}
+                >
+                  Operating Systems
+                </button>
+                <button
+                  type="button"
+                  className="suggestion-tag"
+                  onClick={() => setTopicPrompt('Computer Networks: TCP/IP, Routing Protocols, and DNS')}
+                >
+                  Computer Networks
+                </button>
+                <button
+                  type="button"
+                  className="suggestion-tag"
+                  onClick={() => setTopicPrompt('Full-Stack React & Node.js REST API Best Practices')}
+                >
+                  Web Development
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Option B: PDF Dropzone */
+            <div>
+              {!pdfFile ? (
+                <div
+                  className={`dropzone ${dragOver ? 'dropzone-active' : ''}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".pdf,application/pdf"
+                    style={{ display: 'none' }}
+                  />
+                  <div className="dropzone-icon">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                  </div>
+                  <div className="dropzone-title">Click or drop study material PDF</div>
+                  <div className="dropzone-hint">Lecture notes, syllabus, or textbooks (Max 20MB)</div>
+                </div>
+              ) : (
+                <div className="file-chip-card">
+                  <div className="file-chip-info">
+                    <div className="file-chip-icon">📄</div>
+                    <div>
+                      <div className="file-chip-name">{pdfFile.name}</div>
+                      <div className="file-chip-size">{(pdfFile.size / 1024).toFixed(1)} KB</div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    className="btn btn-sm btn-secondary"
+                    disabled={aiLoading}
+                  >
+                    Replace
+                  </button>
+                </div>
+              )}
+
+              {/* Optional Prompt Toggle for PDF */}
+              <div className="pdf-prompt-toggle-wrap mt-10">
+                <button
+                  type="button"
+                  className="text-toggle-btn"
+                  onClick={() => setShowPdfPrompt(!showPdfPrompt)}
+                >
+                  {showPdfPrompt ? '▲ Hide Focus Instructions (Optional)' : '▼ Add Focus Instructions / Prompt (Optional)'}
+                </button>
+                {showPdfPrompt && (
+                  <div className="mt-8">
+                    <textarea
+                      rows={2}
+                      className="form-control"
+                      value={pdfPrompt}
+                      onChange={(e) => setPdfPrompt(e.target.value)}
+                      placeholder="e.g. Focus on Chapter 3 memory management, prioritize practical application questions, exclude historical trivia..."
+                      disabled={aiLoading}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* AI Generator Controls */}
+          <div className="ai-options-row">
+            <div className="form-group-compact">
+              <label htmlFor="numQuestions">Questions</label>
+              <select
+                id="numQuestions"
+                value={isCustomQuestions ? 'custom' : numQuestions}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    setIsCustomQuestions(true);
+                    if (numQuestions <= 15) setNumQuestions(20);
+                  } else {
+                    setIsCustomQuestions(false);
+                    setNumQuestions(Number(e.target.value));
+                  }
+                }}
+                className="form-control"
+                disabled={aiLoading}
+              >
+                <option value={3}>3 Questions</option>
+                <option value={5}>5 Questions</option>
+                <option value={8}>8 Questions</option>
+                <option value={10}>10 Questions</option>
+                <option value={15}>15 Questions</option>
+                <option value="custom">More... (Custom number)</option>
+              </select>
+
+              {isCustomQuestions && (
+                <div className="mt-8 input-with-addon">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={numQuestions}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setNumQuestions(isNaN(val) ? '' : Math.max(1, Math.min(50, val)));
+                    }}
+                    className="form-control"
+                    placeholder="e.g. 20"
+                    disabled={aiLoading}
+                  />
+                  <span className="addon-text">Questions</span>
+                </div>
+              )}
+            </div>
+
+            <div className="form-group-compact">
+              <label htmlFor="difficulty">Difficulty</label>
+              <select
+                id="difficulty"
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value)}
+                className="form-control"
+                disabled={aiLoading}
+              >
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
+                <option value="Mixed">Mixed</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="api-key-toggle-wrap">
+            <button
+              type="button"
+              className="text-toggle-btn"
+              onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+            >
+              {showApiKeyInput ? '▲ Hide Custom API Key' : '▼ Custom Gemini API Key (Optional)'}
+            </button>
+            {showApiKeyInput && (
+              <input
+                type="password"
+                className="form-control mt-10"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Paste Gemini API key..."
+                disabled={aiLoading}
+              />
+            )}
+          </div>
+
+          <div className="mt-15">
+            <button
+              type="button"
+              onClick={handleAiGenerate}
+              disabled={aiLoading || (aiSubMode === 'pdf' && !pdfFile) || (aiSubMode === 'prompt' && !topicPrompt.trim())}
+              className="btn btn-primary btn-block"
+            >
+              {aiLoading ? (
+                <>
+                  <span className="spinner"></span>
+                  <span>Generating Questions...</span>
+                </>
+              ) : (
+                <>
+                  <span>Generate Questions</span>
+                  <span className="badge-sparkle">AI</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Main Form & Questions Editor */}
       <form onSubmit={handleSubmit}>
-        {/* General Details Card */}
-        <div className="card mb-20">
-          <h3>Quiz Details</h3>
+        {/* Settings Panel */}
+        <div className="panel-card mb-20">
+          <h3 className="panel-title">Assessment Settings</h3>
           <div className="form-group">
-            <label htmlFor="quizTitle">Quiz Title *</label>
+            <label htmlFor="quizTitle">Title *</label>
             <input
               type="text"
               id="quizTitle"
+              className="form-control"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Operating Systems - Virtual Memory & Page Replacement"
+              placeholder="e.g. Database Management Systems — Quiz 1"
               required
             />
           </div>
 
           <div className="form-group">
-            <label htmlFor="quizDescription">Description (Optional)</label>
+            <label htmlFor="quizDescription">Description</label>
             <textarea
               id="quizDescription"
-              rows={3}
+              rows={2}
+              className="form-control"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Instructions or topic coverage..."
+              placeholder="Instructions or topic summary..."
             />
+          </div>
+
+          {/* New: Deadline and Results Release Policy */}
+          <div className="quiz-config-2col mb-15">
+            <div className="form-group mb-0">
+              <label htmlFor="quizEndDate">Deadline / End Date (Optional)</label>
+              <input
+                type="datetime-local"
+                id="quizEndDate"
+                className="form-control"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+              <span className="text-muted text-sm mt-4" style={{ display: 'block' }}>
+                Leave blank for manual close anytime.
+              </span>
+            </div>
+
+            <div className="form-group mb-0">
+              <label htmlFor="resultsPolicy">Score & Solutions Release</label>
+              <select
+                id="resultsPolicy"
+                className="form-control"
+                value={resultsPolicy}
+                onChange={(e) => setResultsPolicy(e.target.value)}
+              >
+                <option value="on_quiz_end">🔒 Hold Until Quiz Ends (Recommended for exams)</option>
+                <option value="immediate_score_only">📊 Instant Score Only (Keys hidden until quiz ends)</option>
+                <option value="immediate_full">⚡ Instant Full Results (Score & solutions shown immediately)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Anti-cheat Option */}
+          <div className="anticheat-box">
+            <label className="checkbox-toggle-label">
+              <input
+                type="checkbox"
+                checked={disableCopy}
+                onChange={(e) => setDisableCopy(e.target.checked)}
+              />
+              <div>
+                <strong>Disable Copy / Text Selection (Anti-Cheat)</strong>
+                <span>Prevents students from copying prompts, dragging text, and opening right-click menus during tests.</span>
+              </div>
+            </label>
           </div>
         </div>
 
-        {/* Questions Section */}
-        <div className="questions-section">
-          <div className="questions-section-header">
-            <div>
-              <h3 style={{ display: 'inline' }}>Questions</h3>
-              <span className="question-counter-badge">{questions.length} Question{questions.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+        {/* Questions Header */}
+        <div className="questions-header-bar">
+          <div>
+            <h2 className="section-title">Questions</h2>
+            <span className="section-count">{questions.length} total</span>
+          </div>
+          <div className="btn-group">
+            <div className="add-question-menu">
               <button
                 type="button"
-                onClick={addQuestion}
-                className="btn btn-secondary btn-sm"
+                onClick={() => addQuestion('single')}
+                className="btn btn-sm btn-secondary"
               >
-                + Add Question
+                + Single Choice
               </button>
-              {questions.length > 1 && (
-                <button
-                  type="button"
-                  onClick={clearQuestions}
-                  className="btn btn-secondary btn-sm text-danger"
-                >
-                  Reset Questions
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => addQuestion('multiple')}
+                className="btn btn-sm btn-secondary"
+              >
+                + Multiple Answers
+              </button>
+              <button
+                type="button"
+                onClick={() => addQuestion('descriptive')}
+                className="btn btn-sm btn-secondary"
+              >
+                + Descriptive
+              </button>
             </div>
+            {questions.length > 1 && (
+              <button
+                type="button"
+                onClick={clearQuestions}
+                className="btn btn-sm btn-danger-soft"
+              >
+                Reset
+              </button>
+            )}
           </div>
+        </div>
 
-          {questions.map((q, idx) => (
-            <div key={idx} className="card question-card mb-20">
-              <div className="question-header">
-                <h4>Question #{idx + 1}</h4>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => duplicateQuestion(idx)}
-                    className="btn btn-secondary btn-sm"
-                    title="Duplicate this question"
-                  >
-                    Duplicate
-                  </button>
-                  {questions.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeQuestion(idx)}
-                      className="btn btn-danger btn-sm"
-                    >
-                      Remove Question
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Question Prompt / Text *</label>
-                <input
-                  type="text"
-                  value={q.question_text}
-                  onChange={(e) => handleQuestionChange(idx, 'question_text', e.target.value)}
-                  placeholder="Enter your question prompt..."
-                  required
-                />
-              </div>
-
-              <div className="options-grid">
-                <div className="form-group">
-                  <label>Option A *</label>
-                  <input
-                    type="text"
-                    value={q.option_a}
-                    onChange={(e) => handleQuestionChange(idx, 'option_a', e.target.value)}
-                    placeholder="Option A"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Option B *</label>
-                  <input
-                    type="text"
-                    value={q.option_b}
-                    onChange={(e) => handleQuestionChange(idx, 'option_b', e.target.value)}
-                    placeholder="Option B"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Option C *</label>
-                  <input
-                    type="text"
-                    value={q.option_c}
-                    onChange={(e) => handleQuestionChange(idx, 'option_c', e.target.value)}
-                    placeholder="Option C"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Option D *</label>
-                  <input
-                    type="text"
-                    value={q.option_d}
-                    onChange={(e) => handleQuestionChange(idx, 'option_d', e.target.value)}
-                    placeholder="Option D"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group correct-option-group">
-                <label><strong>Correct Option *</strong></label>
+        {/* Questions List */}
+        {questions.map((q, idx) => (
+          <div key={idx} className="question-edit-card">
+            <div className="question-card-header">
+              <div className="q-head-left">
+                <span className="question-idx-badge">#{idx + 1}</span>
                 <select
-                  value={q.correct_option}
-                  onChange={(e) => handleQuestionChange(idx, 'correct_option', e.target.value)}
-                  className="select-input"
+                  value={q.question_type || 'single'}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    handleQuestionChange(idx, 'question_type', newType);
+                    if (newType === 'multiple' && !q.correct_option) {
+                      handleQuestionChange(idx, 'correct_option', 'A');
+                    } else if (newType === 'single') {
+                      handleQuestionChange(idx, 'correct_option', 'A');
+                    }
+                  }}
+                  className="type-select-dropdown"
                 >
-                  <option value="A">Option A</option>
-                  <option value="B">Option B</option>
-                  <option value="C">Option C</option>
-                  <option value="D">Option D</option>
+                  <option value="single">Single Choice (Radio)</option>
+                  <option value="multiple">Multiple Answers (Checkboxes)</option>
+                  <option value="descriptive">Descriptive (Text Answer)</option>
                 </select>
               </div>
-            </div>
-          ))}
 
-          <div className="form-actions mb-30">
+              <div className="question-action-btns">
+                <button
+                  type="button"
+                  onClick={() => duplicateQuestion(idx)}
+                  className="btn-icon"
+                  title="Clone Question"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+                {questions.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeQuestion(idx)}
+                    className="btn-icon btn-icon-danger"
+                    title="Delete Question"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Prompt */}
+            <div className="form-group">
+              <label>Question Prompt *</label>
+              <textarea
+                rows={2}
+                className="form-control"
+                value={q.question_text}
+                onChange={(e) => handleQuestionChange(idx, 'question_text', e.target.value)}
+                placeholder="Question statement..."
+                required
+              />
+            </div>
+
+            {/* Optional Image Upload / URL */}
+            <div className="image-attachment-section">
+              {!q.image_url ? (
+                <div className="image-upload-trigger">
+                  <label className="btn-upload-image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span>+ Add Image to Question</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(idx, e)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  <span className="text-muted text-sm">or</span>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm img-url-input"
+                    placeholder="Paste image URL (https://...)"
+                    value={q.image_url || ''}
+                    onChange={(e) => handleQuestionChange(idx, 'image_url', e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="image-preview-box">
+                  <img src={q.image_url} alt={`Question ${idx + 1}`} className="img-thumbnail" />
+                  <div className="image-preview-actions">
+                    <span className="text-sm">Attached Image</span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuestionChange(idx, 'image_url', '')}
+                      className="btn btn-sm btn-danger-soft"
+                    >
+                      Remove Image
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Mode-specific question fields */}
+            {q.question_type === 'descriptive' ? (
+              <div className="descriptive-config-box">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div className="form-group-compact">
+                    <label htmlFor={`wordlimit_${idx}`}>Word / Character Limit</label>
+                    <div className="input-with-addon">
+                      <input
+                        type="number"
+                        id={`wordlimit_${idx}`}
+                        className="form-control"
+                        value={q.word_limit || 100}
+                        onChange={(e) => handleQuestionChange(idx, 'word_limit', parseInt(e.target.value, 10) || 0)}
+                        min={10}
+                        max={1000}
+                      />
+                      <span className="addon-text">Words max</span>
+                    </div>
+                  </div>
+
+                  <div className="form-group-compact">
+                    <label htmlFor={`gradingmode_${idx}`}>Grading / Evaluation Method</label>
+                    <select
+                      id={`gradingmode_${idx}`}
+                      className="form-control"
+                      value={q.grading_mode || 'manual'}
+                      onChange={(e) => handleQuestionChange(idx, 'grading_mode', e.target.value)}
+                    >
+                      <option value="manual">👨‍🏫 Teacher Manual Review (Default full mark, editable in sheet)</option>
+                      <option value="ai">🤖 AI Semantic Evaluation (Background Gemini AI grading)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group mt-12">
+                  <label>Sample Answer / Evaluation Rubric (Optional)</label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    value={q.correct_option || ''}
+                    onChange={(e) => handleQuestionChange(idx, 'correct_option', e.target.value)}
+                    placeholder="Key concepts or reference answer for review..."
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Single Choice or Multiple Choice Options Grid */
+              <div>
+                <div className="options-2x2-grid">
+                  {(['a', 'b', 'c', 'd']).map((optKey) => {
+                    const upper = optKey.toUpperCase();
+                    const isMultiple = q.question_type === 'multiple';
+                    const currentSelectedList = (q.correct_option || '').split(',').map(s => s.trim().toUpperCase());
+                    const isCorrect = isMultiple
+                      ? currentSelectedList.includes(upper)
+                      : q.correct_option === upper;
+
+                    return (
+                      <div key={optKey} className={`option-edit-field ${isCorrect ? 'option-marked-correct' : ''}`}>
+                        <button
+                          type="button"
+                          className={`option-badge-btn ${isCorrect ? 'badge-correct' : ''}`}
+                          onClick={() => {
+                            if (isMultiple) {
+                              handleToggleMultipleCorrect(idx, upper);
+                            } else {
+                              handleQuestionChange(idx, 'correct_option', upper);
+                            }
+                          }}
+                          title={`Click to toggle Option ${upper} as correct`}
+                        >
+                          {isMultiple ? (isCorrect ? `☑ ${upper}` : `☐ ${upper}`) : `${upper} ${isCorrect ? '✓' : ''}`}
+                        </button>
+                        <input
+                          type="text"
+                          className="form-control option-input"
+                          value={q[`option_${optKey}`]}
+                          onChange={(e) => handleQuestionChange(idx, `option_${optKey}`, e.target.value)}
+                          placeholder={`Option ${upper}`}
+                          required
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="correct-answer-indicator">
+                  <span>Correct Key:</span>
+                  <strong className="text-primary">
+                    {q.question_type === 'multiple'
+                      ? (q.correct_option ? `Option(s) ${q.correct_option}` : 'None selected (click badges)')
+                      : `Option ${q.correct_option}`}
+                  </strong>
+                  <span className="text-muted">
+                    {q.question_type === 'multiple'
+                      ? '(Check multiple badges as needed)'
+                      : '(Click badge to set correct)'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Bottom Bar */}
+        <div className="bottom-publish-bar">
+          <div className="btn-group">
             <button
               type="button"
-              onClick={addQuestion}
+              onClick={() => addQuestion('single')}
               className="btn btn-secondary"
             >
-              + Add Another Question
+              + Single Choice
             </button>
             <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
+              type="button"
+              onClick={() => addQuestion('multiple')}
+              className="btn btn-secondary"
             >
-              {loading ? 'Publishing...' : 'Save & Publish Quiz'}
+              + Multiple Answers
+            </button>
+            <button
+              type="button"
+              onClick={() => addQuestion('descriptive')}
+              className="btn btn-secondary"
+            >
+              + Descriptive
             </button>
           </div>
+          <button
+            type="submit"
+            className="btn btn-primary btn-glow"
+            disabled={loading}
+          >
+            {loading ? 'Publishing...' : 'Publish Assessment'}
+          </button>
         </div>
       </form>
     </div>

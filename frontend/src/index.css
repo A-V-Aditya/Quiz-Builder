@@ -1,7 +1,97 @@
-/* Base reset */
-html, body, #root {
+/* Base Reset & Design Tokens */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Gradients */
+  --grad-navy-azure: linear-gradient(135deg, #0a192f 0%, #102a54 45%, #1d4ed8 100%);
+  --grad-primary-blue: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #0284c7 100%);
+  --grad-cyan-glow: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
+  --grad-hero: linear-gradient(135deg, #08162b 0%, #0e2448 55%, #1d4ed8 100%);
+  --grad-card-soft: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  --grad-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(240, 247, 255, 0.85));
+
+  /* Colors */
+  --color-navy: #0a192f;
+  --color-navy-dark: #071120;
+  --color-blue-dark: #102a54;
+  --color-blue-primary: #2563eb;
+  --color-blue-hover: #1d4ed8;
+  --color-blue-light: #38bdf8;
+  --color-blue-surface: #e0f2fe;
+  --color-blue-border: #bae6fd;
+  
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-subtle: #edf2f7;
+
+  /* Typography */
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+  --color-text-light: #94a3b8;
+  --color-text-white: #ffffff;
+
+  /* Status Colors */
+  --color-success: #10b981;
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+  --color-danger: #ef4444;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-warning: #f59e0b;
+  --color-warning-bg: #fffbeb;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 25px -5px rgba(29, 78, 216, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  --shadow-hover: 0 14px 28px -4px rgba(29, 78, 216, 0.14), 0 6px 12px -4px rgba(15, 23, 42, 0.06);
+  --shadow-glow: 0 0 25px rgba(56, 189, 248, 0.25);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  width: 100%;
+}
+
+html, body, #root {
   min-height: 100vh;
+  width: 100%;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--color-bg);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.06) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(56, 189, 248, 0.05) 0px, transparent 40%),
+    radial-gradient(at 50% 100%, rgba(30, 64, 175, 0.04) 0px, transparent 50%);
+  background-attachment: fixed;
+  color: var(--color-text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar polish */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
